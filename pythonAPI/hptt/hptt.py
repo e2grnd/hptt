@@ -5,7 +5,6 @@ from ctypes import cdll
 import os
 import random
 
-
 if 'OMP_NUM_THREADS' in os.environ:
     DEFAULT_THREADS = int(os.environ['OMP_NUM_THREADS'])
 else:
@@ -45,12 +44,18 @@ def checkContiguous(X):
         useRowMajor, order = {
             (True, False): (1, 'C'),
             (False, True): (0, 'F'),
+            (True, True): (1, 'C'),
         }[X.flags['C_CONTIGUOUS'], X.flags['F_CONTIGUOUS']]
     except KeyError:
         raise ValueError("Tensor is neither 'C' or 'F' contiguous.")
 
     return useRowMajor, order
 
+class Complex64(ctypes.Structure):
+    _fields_ = [("real", ctypes.c_float), ("imag", ctypes.c_float)]
+
+class Complex128(ctypes.Structure):
+    _fields_ = [("real", ctypes.c_double), ("imag", ctypes.c_double)]
 
 def tensorTransposeAndUpdate(perm, alpha, A, beta, B, numThreads=-1):
     """
@@ -108,14 +113,21 @@ def tensorTransposeAndUpdate(perm, alpha, A, beta, B, numThreads=-1):
         tranpose_fn, scalar_fn = {
             'float32': (HPTTlib.sTensorTranspose, ctypes.c_float),
             'float64': (HPTTlib.dTensorTranspose, ctypes.c_double),
-            'complex64': (HPTTlib.cTensorTranspose, ctypes.c_float),
-            'complex128': (HPTTlib.zTensorTranspose, ctypes.c_double),
+            'complex64': (HPTTlib.cTensorTranspose, Complex64),
+            'complex128': (HPTTlib.zTensorTranspose, Complex128),
         }[str(A.dtype)]
     except KeyError:
         raise ValueError("Unsupported dtype: {}.".format(A.dtype))
 
     # tranpose!
-    tranpose_fn(permc, ctypes.c_int32(A.ndim),
+    if np.iscomplexobj(A):
+        cflag = ctypes.c_bool()
+        tranpose_fn(permc, ctypes.c_int32(A.ndim),
+                scalar_fn(alpha), cflag, dataA, sizeA, outerSizeA,
+                scalar_fn(beta), dataB, outerSizeB,
+                ctypes.c_int32(numThreads), ctypes.c_int32(useRowMajor))
+    else:
+        tranpose_fn(permc, ctypes.c_int32(A.ndim),
                 scalar_fn(alpha), dataA, sizeA, outerSizeA,
                 scalar_fn(beta), dataB, outerSizeB,
                 ctypes.c_int32(numThreads), ctypes.c_int32(useRowMajor))

@@ -5,7 +5,7 @@ ifeq ($(CXX),icpc)
 CXX_FLAGS += -qopenmp -xhost 
 else
 ifeq ($(CXX),g++)
-CXX_FLAGS += -fopenmp -march=native 
+CXX_FLAGS += -fopenmp -march=native -v
 else
 ifeq ($(CXX),clang++)
 CXX_FLAGS += -fopenmp -march=native
